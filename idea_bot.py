@@ -36,13 +36,12 @@ except ImportError:
 
 # 导入飞书云文档存储模块
 try:
-    from feishu_storage_v2 import (
+    from feishu_storage_v3 import (
         save_to_feishu,
-        read_daily_summary,
-        init_folders
+        read_daily_summary
     )
     FEISHU_STORAGE_AVAILABLE = True
-    print("✅ 飞书云文档存储模块已加载（V2 - 自动创建文件夹）")
+    print("✅ 飞书云文档存储模块已加载（V3 - 简化版，无需文件夹）")
 except ImportError:
     FEISHU_STORAGE_AVAILABLE = False
     print("⚠️  飞书云文档存储模块未找到，将只使用本地存储")
@@ -788,7 +787,8 @@ def save_idea(category: str, content: str, timestamp: str = None) -> dict:
                     category=category,
                     content=content,
                     timestamp=timestamp,
-                    category_name=cat_info["name"]
+                    category_name=cat_info["name"],
+                    category_emoji=cat_info["emoji"]
                 )
                 if feishu_success:
                     print(f"✅ 飞书云文档保存成功")
@@ -1062,20 +1062,6 @@ if __name__ == "__main__":
     print(f"   - 统计数据: http://0.0.0.0:{PORT}/stats")
     print(f"💡 提示: macOS 用户如需使用 5000 端口，请关闭系统设置中的 AirPlay Receiver")
     print(f"💡 命令: 发送 /模型 查看或切换分类模式")
-    
-    # 初始化飞书文件夹（如果配置了飞书）
-    if FEISHU_STORAGE_AVAILABLE and FEISHU_APP_ID and FEISHU_APP_SECRET:
-        print("\n📁 初始化飞书云文档...")
-        token = get_feishu_tenant_access_token()
-        if token:
-            from feishu_storage_v2 import init_folders
-            if init_folders(token):
-                print("✅ 飞书文件夹初始化成功")
-            else:
-                print("⚠️  飞书文件夹初始化失败（将在首次使用时自动创建）")
-        else:
-            print("⚠️  无法获取飞书 token（将在首次使用时自动创建文件夹）")
-    
     print("=" * 60)
     
     app.run(host="0.0.0.0", port=PORT, debug=False)
