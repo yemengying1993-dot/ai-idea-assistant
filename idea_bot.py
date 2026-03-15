@@ -36,14 +36,13 @@ except ImportError:
 
 # 导入飞书云文档存储模块
 try:
-    from feishu_storage import (
-        save_to_feishu, 
-        read_daily_summary, 
-        FEISHU_FOLDERS, 
-        FEISHU_FOLDER_SUMMARY
+    from feishu_storage_v2 import (
+        save_to_feishu,
+        read_daily_summary,
+        init_folders
     )
     FEISHU_STORAGE_AVAILABLE = True
-    print("✅ 飞书云文档存储模块已加载")
+    print("✅ 飞书云文档存储模块已加载（V2 - 自动创建文件夹）")
 except ImportError:
     FEISHU_STORAGE_AVAILABLE = False
     print("⚠️  飞书云文档存储模块未找到，将只使用本地存储")
@@ -281,7 +280,7 @@ def generate_daily_report():
     date_str = today.strftime("%Y-%m-%d")
     
     # 1️⃣ 尝试从飞书汇总文档读取
-    if FEISHU_STORAGE_AVAILABLE and FEISHU_FOLDER_SUMMARY:
+    if FEISHU_STORAGE_AVAILABLE:
         token = get_feishu_tenant_access_token()
         if token:
             try:
@@ -353,7 +352,7 @@ def generate_weekly_report():
     monday = today - timedelta(days=today.weekday())
     
     # 1️⃣ 尝试从飞书汇总文档读取本周数据
-    if FEISHU_STORAGE_AVAILABLE and FEISHU_FOLDER_SUMMARY:
+    if FEISHU_STORAGE_AVAILABLE:
         token = get_feishu_tenant_access_token()
         if token:
             try:
@@ -1063,6 +1062,20 @@ if __name__ == "__main__":
     print(f"   - 统计数据: http://0.0.0.0:{PORT}/stats")
     print(f"💡 提示: macOS 用户如需使用 5000 端口，请关闭系统设置中的 AirPlay Receiver")
     print(f"💡 命令: 发送 /模型 查看或切换分类模式")
+    
+    # 初始化飞书文件夹（如果配置了飞书）
+    if FEISHU_STORAGE_AVAILABLE and FEISHU_APP_ID and FEISHU_APP_SECRET:
+        print("\n📁 初始化飞书云文档...")
+        token = get_feishu_tenant_access_token()
+        if token:
+            from feishu_storage_v2 import init_folders
+            if init_folders(token):
+                print("✅ 飞书文件夹初始化成功")
+            else:
+                print("⚠️  飞书文件夹初始化失败（将在首次使用时自动创建）")
+        else:
+            print("⚠️  无法获取飞书 token（将在首次使用时自动创建文件夹）")
+    
     print("=" * 60)
     
     app.run(host="0.0.0.0", port=PORT, debug=False)
