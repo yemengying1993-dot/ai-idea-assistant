@@ -172,6 +172,49 @@ def get_or_create_summary_doc(token, date_str):
     return doc_id
 
 
+def get_doc_root_block(token, doc_id):
+    """获取文档的根块 ID
+    
+    Args:
+        token: 飞书 access token
+        doc_id: 文档 ID
+        
+    Returns:
+        block_id: 根块 ID
+    """
+    try:
+        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        params = {
+            "page_size": 1
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        result = response.json()
+        
+        if result.get("code") == 0:
+            # 获取根块 (page block)
+            page_block_id = result.get("data", {}).get("page_block_id")
+            if page_block_id:
+                return page_block_id
+            # 如果没有 page_block_id，尝试获取第一个块
+            blocks = result.get("data", {}).get("blocks", [])
+            if blocks:
+                return blocks[0].get("block_id")
+        
+        print(f"⚠️  无法获取文档根块: {result}")
+        return None
+        
+    except Exception as e:
+        print(f"❌ 获取文档根块失败: {e}")
+        return None
+
+
 def append_to_doc(token, doc_id, content, timestamp):
     """追加内容到文档
     
@@ -185,7 +228,13 @@ def append_to_doc(token, doc_id, content, timestamp):
         bool: 是否成功
     """
     try:
-        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/children"
+        # 先获取文档的根块 ID
+        root_block_id = get_doc_root_block(token, doc_id)
+        if not root_block_id:
+            print("❌ 无法获取文档根块 ID")
+            return False
+        
+        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{root_block_id}/children"
         
         headers = {
             "Authorization": f"Bearer {token}",
@@ -230,16 +279,39 @@ def append_to_doc(token, doc_id, content, timestamp):
         }
         
         response = requests.post(url, headers=headers, json=data)
-        result = response.json()
         
+        # 详细的响应日志
+        print(f"📊 追加内容 API 响应状态: {response.status_code}")
+        
+        # 检查响应状态
+        if response.status_code != 200:
+            print(f"❌ HTTP 错误: {response.status_code}")
+            print(f"   响应内容: {response.text[:200]}")
+            return False
+        
+        # 尝试解析 JSON
+        try:
+            result = response.json()
+        except Exception as json_err:
+            print(f"❌ JSON 解析失败: {json_err}")
+            print(f"   响应文本: {response.text[:500]}")
+            return False
+        
+        # 检查业务逻辑错误
         if result.get("code") == 0:
+            print(f"✅ 内容追加成功")
             return True
         else:
             print(f"❌ 追加内容失败: {result}")
             return False
             
+    except requests.exceptions.RequestException as req_err:
+        print(f"❌ 网络请求异常: {req_err}")
+        return False
     except Exception as e:
         print(f"❌ 追加内容异常: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
