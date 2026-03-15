@@ -240,41 +240,23 @@ def append_to_doc(token, doc_id, content, timestamp):
             "Content-Type": "application/json"
         }
         
-        # 构造内容块
+        # 最简化版本（block_type: 2 = 文本块）
         data = {
             "children": [
                 {
-                    "block_type": 2,  # 标题3
-                    "heading3": {
-                        "elements": [{
-                            "text_run": {
-                                "text": timestamp
-                            }
-                        }]
-                    }
-                },
-                {
-                    "block_type": 1,  # 文本段落
+                    "block_type": 2,
                     "text": {
-                        "elements": [{
-                            "text_run": {
-                                "text": content
+                        "elements": [
+                            {
+                                "text_run": {
+                                    "content": f"### {timestamp}\n{content}\n\n"
+                                }
                             }
-                        }]
-                    }
-                },
-                {
-                    "block_type": 1,  # 空行
-                    "text": {
-                        "elements": [{
-                            "text_run": {
-                                "text": ""
-                            }
-                        }]
+                        ],
+                        "style": {}
                     }
                 }
-            ],
-            "index": -1  # 追加到文档末尾
+            ]
         }
         
         response = requests.post(url, headers=headers, json=data)
@@ -285,7 +267,7 @@ def append_to_doc(token, doc_id, content, timestamp):
         # 检查响应状态
         if response.status_code != 200:
             print(f"❌ HTTP 错误: {response.status_code}")
-            print(f"   响应内容: {response.text[:200]}")
+            print(f"   完整响应: {response.text}")
             return False
         
         # 尝试解析 JSON
