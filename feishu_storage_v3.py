@@ -198,14 +198,13 @@ def get_doc_root_block(token, doc_id):
         result = response.json()
         
         if result.get("code") == 0:
-            # 获取根块 (page block)
-            page_block_id = result.get("data", {}).get("page_block_id")
-            if page_block_id:
-                return page_block_id
-            # 如果没有 page_block_id，尝试获取第一个块
-            blocks = result.get("data", {}).get("blocks", [])
-            if blocks:
-                return blocks[0].get("block_id")
+            # 获取第一个块（根块）
+            items = result.get("data", {}).get("items", [])
+            if items and len(items) > 0:
+                block_id = items[0].get("block_id")
+                if block_id:
+                    print(f"✅ 获取到文档根块 ID: {block_id}")
+                    return block_id
         
         print(f"⚠️  无法获取文档根块: {result}")
         return None
