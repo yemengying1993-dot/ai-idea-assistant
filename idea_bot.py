@@ -1099,68 +1099,101 @@ def feishu_webhook():
         
         print(f"📩 收到飞书消息，类型: {message_type}, open_id: {open_id}, msg_id: {message_id}")
         
-        if message_type == "text":
-            # 飞书的 content 是 JSON 字符串
-            content_str = message.get("content", "{}")
-            try:
-                content_obj = json.loads(content_str)
+        # 提取消息内容（支持 text 和 post 类型）
+        content = None
+        content_str = message.get("content", "{}")
+        
+        try:
+            content_obj = json.loads(content_str)
+            
+            if message_type == "text":
+                # text 类型：{"text": "消息内容"}
                 content = content_obj.get("text", "").strip()
-            except:
-                content = content_str.strip()
             
-            if not content:
-                print("⚠️  消息内容为空")
-                return jsonify({"code": 0, "msg": "ok"})
-            
-            print(f"📝 收到内容: {content}")
-            
-            # 检查是否是命令
-            if content.startswith("/"):
-                handle_command(content, open_id)
-                return jsonify({"code": 0, "msg": "ok"})
-            
-            # 普通想法记录
-            print(f"🔄 开始处理想法...")
-            
-            # AI 分类
-            try:
-                category = classify_idea_with_ai(content)
-                print(f"🎯 分类结果: {category}")
-            except Exception as e:
-                print(f"❌ 分类失败: {e}")
-                category = "other"
-            
-            # 保存
-            try:
-                result = save_idea(category, content)
-                print(f"✅ 已保存到: {result['category']}")
-                print(f"📄 文件路径: {result['file']}")
-            except Exception as e:
-                print(f"❌ 保存失败: {e}")
-                import traceback
-                traceback.print_exc()
-                # 即使保存失败，也要回复用户
-                send_feishu_text_message(open_id, "❌ 保存失败", f"抱歉，保存失败: {str(e)}")
-                return jsonify({"code": 0, "msg": "ok"})
-            
-            # 主动发送回复消息
-            if open_id:
-                send_feishu_message(
-                    open_id=open_id,
-                    content=content,
-                    category_name=result['category'],
-                    category_emoji=result['emoji'],
-                    timestamp=result['timestamp'],
-                    doc_url=result.get('doc_url'),
-                    summary_url=result.get('summary_url')
-                )
-            else:
-                print("⚠️  未获取到 open_id，无法回复")
-            
-            # 返回成功（飞书要求）
+            elif message_type == "post":
+                # post 类型：{"zh_cn": {"title": "...", "content": [[{"tag": "text", "text": "..."}]]}}
+                zh_cn = content_obj.get("zh_cn", {})
+                
+                # 提取标题（如果有）
+                title = zh_cn.get("title", "").strip()
+                
+                # 提取内容
+                post_content = zh_cn.get("content", [])
+                text_parts = []
+                
+                for paragraph in post_content:
+                    if isinstance(paragraph, list):
+                        for element in paragraph:
+                            if isinstance(element, dict) and element.get("tag") == "text":
+                                text = element.get("text", "").strip()
+                                if text:
+                                    text_parts.append(text)
+                
+                # 组合标题和内容
+                if title and text_parts:
+                    content = f"{title}\n\n{' '.join(text_parts)}"
+                elif title:
+                    content = title
+                elif text_parts:
+                    content = " ".join(text_parts)
+                
+                print(f"📝 post类型消息解析: 标题={title}, 段落数={len(text_parts)}")
+        
+        except Exception as e:
+            print(f"⚠️  解析消息内容失败: {e}")
+            content = content_str.strip()
+        
+        # 检查内容是否为空
+        if not content:
+            print("⚠️  消息内容为空")
             return jsonify({"code": 0, "msg": "ok"})
         
-        print(f"⚠️  不支持的消息类型: {message_type}")
+        print(f"📝 收到内容: {content[:100]}{'...' if len(content) > 100 else ''}")
+        
+        # 检查是否是命令
+        if content.startswith("/"):
+            handle_command(content, open_id)
+            return jsonify({"code": 0, "msg": "ok"})
+        
+        # 普通想法记录
+        print(f"🔄 开始处理想法...")
+        
+        # AI 分类
+        try:
+            category = classify_idea_with_ai(content)
+            print(f"🎯 分类结果: {category}")
+        except Exception as e:
+            print(f"❌ 分类失败: {e}")
+            category = "other"
+        
+        # 保存
+        try:
+            result = save_idea(category, content)
+            print(f"✅ 已保存到: {result['category']}")
+            print(f"📄 文件路径: {result['file']}")
+        except Exception as e:
+            print(f"❌ 保存失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 即使保存失败，也要回复用户
+            send_feishu_text_message(open_id, "❌ 保存失败", f"抱歉，保存失败: {str(e)}")
+            return jsonify({"code": 0, "msg": "ok"})
+        
+        # 主动发送回复消息
+        if open_id:
+            send_feishu_message(
+                open_id=open_id,
+                content=content[:1000] if len(content) > 1000 else content,  # 限制显示长度
+                category_name=result['category'],
+                category_emoji=result['emoji'],
+                timestamp=result['timestamp'],
+                doc_url=result.get('doc_url'),
+                summary_url=result.get('summary_url')
+            )
+        else:
+            print("⚠️  未获取到 open_id，无法回复")
+        
+        # 返回成功（飞书要求）
         return jsonify({"code": 0, "msg": "ok"})
         
     except Exception as e:
