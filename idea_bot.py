@@ -51,7 +51,9 @@ try:
     from feishu_storage_v3 import (
         save_to_feishu,
         read_daily_summary,
-        list_today_docs
+        list_today_docs,
+        list_all_docs,
+        list_docs_by_date
     )
     FEISHU_STORAGE_AVAILABLE = True
     print("✅ 飞书云文档存储模块已加载（V3 - 简化版，无需文件夹）")
@@ -546,29 +548,91 @@ def handle_command(command: str, open_id: str):
         report = generate_monthly_report()
         send_feishu_text_message(open_id, "📅 每月想法汇总", report)
     
-    elif command_lower == "/文档" or command_lower == "/docs":
-        # 列出今天的所有文档
+    elif command_lower.startswith("/文档") or command_lower.startswith("/docs"):
+        # 解析参数
+        parts = command.strip().split()
+        
         if FEISHU_STORAGE_AVAILABLE:
             token = get_feishu_tenant_access_token()
-            if token:
-                docs = list_today_docs(token)
+            if not token:
+                send_feishu_text_message(open_id, "错误", "⚠️ 无法获取飞书 token")
+                return
+            
+            # 情况1: /文档 全部
+            if len(parts) > 1 and parts[1] in ["全部", "all", "历史"]:
+                docs_by_date = list_all_docs(token)
+                
+                if docs_by_date:
+                    # 按日期倒序排列
+                    sorted_dates = sorted(docs_by_date.keys(), reverse=True)
+                    
+                    message = f"📚 全部文档 (共 {len(sorted_dates)} 天)\n\n"
+                    
+                    for date_str in sorted_dates:
+                        docs = docs_by_date[date_str]
+                        message += f"📅 {date_str} ({len(docs)}个文档)\n"
+                        
+                        for doc in docs:
+                            message += f"  {doc['emoji']} {doc['category']}\n"
+                            message += f"  🔗 {doc['url']}\n"
+                        
+                        message += "\n"
+                    
+                    message += "💡 提示：点击链接直接打开文档"
+                    send_feishu_text_message(open_id, "📚 全部文档", message)
+                else:
+                    send_feishu_text_message(open_id, "📚 全部文档", 
+                        "还没有创建任何文档哦！\n\n💡 发送一条想法试试~")
+            
+            # 情况2: /文档 2026-03-15（指定日期）
+            elif len(parts) > 1:
+                date_str = parts[1]
+                
+                # 验证日期格式
+                try:
+                    from datetime import datetime
+                    datetime.strptime(date_str, "%Y-%m-%d")
+                except:
+                    send_feishu_text_message(open_id, "❌ 格式错误", 
+                        f"日期格式不正确: {date_str}\n\n请使用格式: YYYY-MM-DD\n例如: /文档 2026-03-15")
+                    return
+                
+                docs = list_docs_by_date(token, date_str)
                 
                 if docs:
-                    # 构造回复消息
-                    today = get_current_time().strftime("%Y-%m-%d")
-                    message = f"📚 飞书文档列表 ({today})\n\n"
+                    message = f"📚 {date_str} 的文档\n\n"
                     
                     for doc in docs:
-                        message += f"{doc['emoji']} {doc['title']}\n"
+                        message += f"{doc['emoji']} {doc['category']}\n"
                         message += f"🔗 {doc['url']}\n\n"
                     
                     message += "💡 提示：点击链接直接打开文档"
+                    send_feishu_text_message(open_id, f"📚 {date_str} 的文档", message)
+                else:
+                    send_feishu_text_message(open_id, f"📚 {date_str} 的文档", 
+                        f"{date_str} 没有创建任何文档")
+            
+            # 情况3: /文档（今天的文档）
+            else:
+                docs = list_today_docs(token)
+                
+                if docs:
+                    today = get_current_time().strftime("%Y-%m-%d")
+                    message = f"📚 今日文档 ({today})\n\n"
+                    
+                    for doc in docs:
+                        message += f"{doc['emoji']} {doc['category']}\n"
+                        message += f"🔗 {doc['url']}\n\n"
+                    
+                    message += "💡 提示：\n"
+                    message += "• 点击链接直接打开文档\n"
+                    message += "• /文档 全部 - 查看所有历史文档\n"
+                    message += "• /文档 2026-03-15 - 查看指定日期文档"
+                    
                     send_feishu_text_message(open_id, "📚 今日文档", message)
                 else:
                     send_feishu_text_message(open_id, "📚 今日文档", 
                         f"今天还没有创建任何文档哦！\n\n💡 发送一条想法试试~")
-            else:
-                send_feishu_text_message(open_id, "错误", "⚠️ 无法获取飞书 token")
         else:
             send_feishu_text_message(open_id, "提示", "⚠️ 飞书云文档功能未启用")
     
@@ -631,6 +695,9 @@ def handle_command(command: str, open_id: str):
 直接发送消息即可自动记录并分类
 
 🎯 支持的命令
+• /文档 - 查看今日文档
+• /文档 全部 - 查看所有历史文档
+• /文档 2026-03-15 - 查看指定日期文档
 • /日报 - 查看今日想法汇总
 • /周报 - 查看本周想法汇总
 • /月报 - 查看本月想法汇总

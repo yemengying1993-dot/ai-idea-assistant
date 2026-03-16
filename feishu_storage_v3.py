@@ -429,6 +429,119 @@ def read_daily_summary(token, date_str):
         return None
 
 
+def list_all_docs(token):
+    """列出所有历史文档（按日期分组）
+    
+    Args:
+        token: 飞书 access token
+        
+    Returns:
+        dict: {date_str: [{'title': str, 'url': str, 'emoji': str, 'category': str}]}
+    """
+    if not token:
+        return {}
+    
+    try:
+        url = "https://open.feishu.cn/open-apis/drive/v1/files"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        # 搜索所有文档
+        params = {
+            "page_size": 200  # 一次最多200个
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        result = response.json()
+        
+        if result.get("code") != 0:
+            print(f"❌ 获取文档列表失败: {result}")
+            return {}
+        
+        files = result.get("data", {}).get("files", [])
+        
+        # 按日期分组
+        docs_by_date = {}
+        
+        for file in files:
+            if file.get("type") != "docx":
+                continue
+            
+            title = file.get("name", "")
+            doc_id = file.get("token", "")
+            
+            # 检查是否是我们的文档（格式：2026-03-16 emoji 分类记录）
+            if not doc_id or len(title) < 10:
+                continue
+            
+            # 提取日期（前10个字符应该是 YYYY-MM-DD）
+            date_str = title[:10]
+            
+            # 验证日期格式
+            try:
+                from datetime import datetime
+                datetime.strptime(date_str, "%Y-%m-%d")
+            except:
+                continue  # 不是我们的文档格式
+            
+            # 提取分类信息
+            if "📊" in title and "汇总" in title:
+                emoji = "📊"
+                category = "汇总"
+            elif "💼" in title and "工作" in title:
+                emoji = "💼"
+                category = "工作"
+            elif "🏠" in title and "生活" in title:
+                emoji = "🏠"
+                category = "生活"
+            elif "📚" in title and "学习" in title:
+                emoji = "📚"
+                category = "学习"
+            elif "💡" in title and "灵感" in title:
+                emoji = "💡"
+                category = "灵感"
+            elif "✅" in title and "待办" in title:
+                emoji = "✅"
+                category = "待办"
+            elif "💪" in title and "健康" in title:
+                emoji = "💪"
+                category = "健康"
+            elif "💰" in title and "财务" in title:
+                emoji = "💰"
+                category = "财务"
+            elif "📝" in title and "其他" in title:
+                emoji = "📝"
+                category = "其他"
+            else:
+                continue  # 不是我们的文档
+            
+            # 添加到分组
+            if date_str not in docs_by_date:
+                docs_by_date[date_str] = []
+            
+            docs_by_date[date_str].append({
+                'title': title,
+                'url': f"https://feishu.cn/docx/{doc_id}",
+                'emoji': emoji,
+                'category': category
+            })
+        
+        # 对每个日期的文档排序（汇总在前）
+        for date_str in docs_by_date:
+            docs_by_date[date_str].sort(key=lambda x: (0 if x['category'] == '汇总' else 1, x['category']))
+        
+        return docs_by_date
+        
+    except Exception as e:
+        print(f"❌ 列出所有文档失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+
 def list_today_docs(token):
     """列出今日所有文档
     
@@ -444,6 +557,22 @@ def list_today_docs(token):
     # 获取今日日期
     now = datetime.now(tz)
     date_str = now.strftime("%Y-%m-%d")
+    
+    return list_docs_by_date(token, date_str)
+
+
+def list_docs_by_date(token, date_str):
+    """列出指定日期的文档
+    
+    Args:
+        token: 飞书 access token
+        date_str: 日期字符串 (YYYY-MM-DD)
+        
+    Returns:
+        list: [{'title': str, 'url': str, 'emoji': str, 'category': str}]
+    """
+    if not token:
+        return []
     
     docs = []
     
