@@ -1103,62 +1103,54 @@ def feishu_webhook():
         content = None
         content_str = message.get("content", "{}")
         
-        # 【调试】打印完整的content内容
-        print(f"🔍 原始content: {content_str[:500]}")
-        
         try:
             content_obj = json.loads(content_str)
-            
-            # 【调试】打印解析后的结构
-            print(f"🔍 解析后的content_obj: {json.dumps(content_obj, ensure_ascii=False)[:500]}")
             
             if message_type == "text":
                 # text 类型：{"text": "消息内容"}
                 content = content_obj.get("text", "").strip()
             
             elif message_type == "post":
-                # post 类型：可能的结构
-                # 1. {"zh_cn": {"title": "...", "content": [[{"tag": "text", "text": "..."}]]}}
-                # 2. 或其他结构
+                # post 类型的两种可能结构：
+                # 1. {"zh_cn": {"title": "...", "content": [...]}}  (旧版)
+                # 2. {"title": "...", "content": [...]}  (新版/当前)
                 
-                # 尝试多种解析方式
+                # 尝试从 zh_cn 获取（旧版）
                 zh_cn = content_obj.get("zh_cn", {})
+                if zh_cn:
+                    title = zh_cn.get("title", "").strip()
+                    post_content = zh_cn.get("content", [])
+                else:
+                    # 直接从根级别获取（新版）
+                    title = content_obj.get("title", "").strip()
+                    post_content = content_obj.get("content", [])
                 
-                # 提取标题（如果有）
-                title = zh_cn.get("title", "").strip()
-                
-                # 提取内容
-                post_content = zh_cn.get("content", [])
                 text_parts = []
                 
-                print(f"🔍 zh_cn: {zh_cn}")
-                print(f"🔍 post_content类型: {type(post_content)}, 长度: {len(post_content) if isinstance(post_content, list) else 'N/A'}")
-                
+                # 遍历所有段落
                 for paragraph in post_content:
-                    print(f"🔍 paragraph类型: {type(paragraph)}, 内容: {paragraph}")
                     if isinstance(paragraph, list):
+                        # 每个段落是一个数组，包含多个文本元素
+                        paragraph_texts = []
                         for element in paragraph:
-                            print(f"🔍 element: {element}")
                             if isinstance(element, dict) and element.get("tag") == "text":
                                 text = element.get("text", "").strip()
                                 if text:
-                                    text_parts.append(text)
-                    elif isinstance(paragraph, dict):
-                        # 可能直接是字典
-                        if paragraph.get("tag") == "text":
-                            text = paragraph.get("text", "").strip()
-                            if text:
-                                text_parts.append(text)
+                                    paragraph_texts.append(text)
+                        
+                        # 合并段落内的所有文本（用空格连接）
+                        if paragraph_texts:
+                            text_parts.append("".join(paragraph_texts))
                 
-                # 组合标题和内容
+                # 组合标题和内容（用换行分隔段落）
                 if title and text_parts:
-                    content = f"{title}\n\n{' '.join(text_parts)}"
+                    content = f"{title}\n\n" + "\n".join(text_parts)
                 elif title:
                     content = title
                 elif text_parts:
-                    content = " ".join(text_parts)
+                    content = "\n".join(text_parts)
                 
-                print(f"📝 post类型消息解析: 标题={title}, 段落数={len(text_parts)}, text_parts={text_parts[:3]}")
+                print(f"📝 post类型消息解析成功: 标题={title[:50] if title else '(无)'}, 段落数={len(text_parts)}")
         
         except Exception as e:
             print(f"⚠️  解析消息内容失败: {e}")
