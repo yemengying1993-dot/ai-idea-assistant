@@ -6,6 +6,7 @@
 # 个人想法数据（隐私保护）
 ideas/
 *.md
+!README.md
 
 # Python
 __pycache__/
