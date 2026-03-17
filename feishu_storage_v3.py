@@ -103,22 +103,23 @@ def add_doc_permission(token, doc_id, user_open_id):
         bool: 是否成功
     """
     try:
-        url = f"https://open.feishu.cn/open-apis/drive/v1/permissions/{doc_id}/members"
+        # URL查询参数：文档类型
+        url = f"https://open.feishu.cn/open-apis/drive/v1/permissions/{doc_id}/members?type=docx"
         
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
         
-        # 参数顺序：type必须在最前面
+        # 请求体参数：协作者信息
         data = {
-            "type": "user",
-            "perm": "edit",
             "member_type": "openid",
-            "member_id": user_open_id
+            "member_id": user_open_id,
+            "perm": "edit",  # 可编辑权限
+            "type": "user"   # 协作者类型：用户
         }
         
-        print(f"🔍 授权请求: {url}")
+        print(f"🔍 授权请求URL: {url}")
         print(f"🔍 授权参数: {data}")
         
         response = requests.post(url, headers=headers, json=data)
@@ -131,8 +132,8 @@ def add_doc_permission(token, doc_id, user_open_id):
             return True
         else:
             # 可能已经有权限了，不算错误
-            if result.get("code") == 1254044:  # 已存在
-                print(f"ℹ️  用户已有权限: {doc_id}")
+            if result.get("code") == 1063003:  # Invalid operation - 可能权限已存在
+                print(f"ℹ️  用户已有权限或权限更高: {doc_id}")
                 return True
             print(f"⚠️  授权失败: {result}")
             return False
@@ -213,7 +214,6 @@ def get_or_create_daily_doc(token, category, date_str, category_name, emoji, use
     
     # 查找已存在的文档
     doc_id = find_doc_by_title(token, title)
-    file_token = None
     
     is_new_doc = False
     if not doc_id:
@@ -221,12 +221,13 @@ def get_or_create_daily_doc(token, category, date_str, category_name, emoji, use
         result = create_feishu_doc(token, title)
         if result:
             doc_id = result.get("doc_id")
-            file_token = result.get("file_token")
             is_new_doc = True
     
     # 如果是新文档且有 user_open_id，自动授予编辑权限
-    if is_new_doc and file_token and user_open_id:
-        add_doc_permission(token, file_token, user_open_id)
+    # 尝试直接用 document_id 作为权限token
+    if is_new_doc and doc_id and user_open_id:
+        print(f"🔍 尝试授权: doc_id={doc_id}")
+        add_doc_permission(token, doc_id, user_open_id)
     
     # 缓存 doc_id
     if doc_id:
@@ -259,7 +260,6 @@ def get_or_create_summary_doc(token, date_str, user_open_id=None):
     
     # 查找已存在的文档
     doc_id = find_doc_by_title(token, title)
-    file_token = None
     
     is_new_doc = False
     if not doc_id:
@@ -267,12 +267,13 @@ def get_or_create_summary_doc(token, date_str, user_open_id=None):
         result = create_feishu_doc(token, title)
         if result:
             doc_id = result.get("doc_id")
-            file_token = result.get("file_token")
             is_new_doc = True
     
     # 如果是新文档且有 user_open_id，自动授予编辑权限
-    if is_new_doc and file_token and user_open_id:
-        add_doc_permission(token, file_token, user_open_id)
+    # 尝试直接用 document_id 作为权限token
+    if is_new_doc and doc_id and user_open_id:
+        print(f"🔍 尝试授权汇总文档: doc_id={doc_id}")
+        add_doc_permission(token, doc_id, user_open_id)
     
     # 缓存
     if doc_id:
