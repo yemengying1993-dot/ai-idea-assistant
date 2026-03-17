@@ -938,7 +938,6 @@ def save_idea(category: str, content: str, timestamp: str = None, user_open_id: 
     # 2️⃣ 保存到飞书云文档
     feishu_success = False
     doc_url = None
-    summary_url = None
     
     if FEISHU_STORAGE_AVAILABLE:
         token = get_feishu_tenant_access_token()
@@ -957,7 +956,6 @@ def save_idea(category: str, content: str, timestamp: str = None, user_open_id: 
                 if isinstance(result, dict):
                     feishu_success = result.get("success", False)
                     doc_url = result.get("doc_url")
-                    summary_url = result.get("summary_url")
                 else:
                     # 兼容旧版本（返回 bool）
                     feishu_success = result
@@ -975,8 +973,7 @@ def save_idea(category: str, content: str, timestamp: str = None, user_open_id: 
         "emoji": cat_info["emoji"],
         "file": str(category_file),
         "timestamp": timestamp,
-        "doc_url": doc_url,
-        "summary_url": summary_url
+        "doc_url": doc_url
     }
 
 
@@ -1196,8 +1193,7 @@ def feishu_webhook():
                 category_name=result['category'],
                 category_emoji=result['emoji'],
                 timestamp=result['timestamp'],
-                doc_url=result.get('doc_url'),
-                summary_url=result.get('summary_url')
+                doc_url=result.get('doc_url')
             )
         else:
             print("⚠️  未获取到 open_id，无法回复")
