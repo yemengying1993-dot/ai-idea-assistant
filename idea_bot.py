@@ -783,7 +783,7 @@ def send_feishu_text_message(open_id, title, content):
         return False
 
 
-def send_feishu_message(open_id, content, category_name, category_emoji, timestamp, doc_url=None, summary_url=None):
+def send_feishu_message(open_id, content, category_name, category_emoji, timestamp, doc_url=None):
     """发送飞书消息（带文档链接）"""
     token = get_feishu_tenant_access_token()
     if not token:
@@ -818,7 +818,7 @@ def send_feishu_message(open_id, content, category_name, category_emoji, timesta
         ]
         
         # 添加文档链接（如果有）
-        if doc_url or summary_url:
+        if doc_url:
             elements.append({
                 "tag": "hr"
             })
@@ -832,35 +832,21 @@ def send_feishu_message(open_id, content, category_name, category_emoji, timesta
             }
             elements.append(link_element)
             
-            # 添加按钮
-            actions = []
-            if doc_url:
-                actions.append({
-                    "tag": "button",
-                    "text": {
-                        "tag": "plain_text",
-                        "content": f"{category_emoji} {category_name}记录"
-                    },
-                    "type": "primary",
-                    "url": doc_url
-                })
+            # 添加按钮：查看今日记录
+            actions = [{
+                "tag": "button",
+                "text": {
+                    "tag": "plain_text",
+                    "content": "📝 查看今日记录"
+                },
+                "type": "primary",
+                "url": doc_url
+            }]
             
-            if summary_url:
-                actions.append({
-                    "tag": "button",
-                    "text": {
-                        "tag": "plain_text",
-                        "content": "📊 今日汇总"
-                    },
-                    "type": "default",
-                    "url": summary_url
-                })
-            
-            if actions:
-                elements.append({
-                    "tag": "action",
-                    "actions": actions
-                })
+            elements.append({
+                "tag": "action",
+                "actions": actions
+            })
         
         # 构造完整卡片
         card_content = {

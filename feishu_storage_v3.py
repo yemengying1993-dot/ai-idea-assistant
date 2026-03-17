@@ -189,15 +189,12 @@ def find_doc_by_title(token, title):
         return None
 
 
-def get_or_create_daily_doc(token, category, date_str, category_name, emoji, user_open_id=None):
-    """获取或创建今日文档（自动授予用户编辑权限）
+def get_or_create_unified_daily_doc(token, date_str, user_open_id=None):
+    """获取或创建统一的每日文档（自动授予用户编辑权限）
     
     Args:
         token: 飞书 access token
-        category: 分类 ID
         date_str: 日期字符串
-        category_name: 分类名称
-        emoji: 分类图标
         user_open_id: 用户的 open_id（可选，用于自动授权）
         
     Returns:
@@ -205,12 +202,12 @@ def get_or_create_daily_doc(token, category, date_str, category_name, emoji, use
     """
     global doc_cache
     
-    # 检查缓存
-    if category in doc_cache and date_str in doc_cache[category]:
-        return doc_cache[category][date_str]
+    # 检查缓存（使用特殊key "unified"）
+    if "unified" in doc_cache and date_str in doc_cache["unified"]:
+        return doc_cache["unified"][date_str]
     
-    # 文档标题（包含 emoji 和分类）
-    title = f"{date_str} {emoji} {category_name}记录"
+    # 文档标题：每日记录
+    title = f"{date_str} 📝 每日记录"
     
     # 查找已存在的文档
     doc_id = find_doc_by_title(token, title)
@@ -224,62 +221,20 @@ def get_or_create_daily_doc(token, category, date_str, category_name, emoji, use
             is_new_doc = True
     
     # 如果是新文档且有 user_open_id，自动授予编辑权限
-    # 尝试直接用 document_id 作为权限token
     if is_new_doc and doc_id and user_open_id:
-        print(f"🔍 尝试授权: doc_id={doc_id}")
+        print(f"🔍 尝试授权每日文档: doc_id={doc_id}")
         add_doc_permission(token, doc_id, user_open_id)
     
     # 缓存 doc_id
     if doc_id:
-        if category not in doc_cache:
-            doc_cache[category] = {}
-        doc_cache[category][date_str] = doc_id
+        if "unified" not in doc_cache:
+            doc_cache["unified"] = {}
+        doc_cache["unified"][date_str] = doc_id
     
     return doc_id
 
 
-def get_or_create_summary_doc(token, date_str, user_open_id=None):
-    """获取或创建今日汇总文档（自动授予用户编辑权限）
-    
-    Args:
-        token: 飞书 access token
-        date_str: 日期字符串
-        user_open_id: 用户的 open_id（可选，用于自动授权）
-        
-    Returns:
-        doc_id: 文档 ID
-    """
-    global summary_doc_cache
-    
-    # 检查缓存
-    if date_str in summary_doc_cache:
-        return summary_doc_cache[date_str]
-    
-    # 文档标题
-    title = f"{date_str} 📊 全部想法汇总"
-    
-    # 查找已存在的文档
-    doc_id = find_doc_by_title(token, title)
-    
-    is_new_doc = False
-    if not doc_id:
-        # 创建新文档
-        result = create_feishu_doc(token, title)
-        if result:
-            doc_id = result.get("doc_id")
-            is_new_doc = True
-    
-    # 如果是新文档且有 user_open_id，自动授予编辑权限
-    # 尝试直接用 document_id 作为权限token
-    if is_new_doc and doc_id and user_open_id:
-        print(f"🔍 尝试授权汇总文档: doc_id={doc_id}")
-        add_doc_permission(token, doc_id, user_open_id)
-    
-    # 缓存
-    if doc_id:
-        summary_doc_cache[date_str] = doc_id
-    
-    return doc_id
+# 汇总文档函数已废弃，现在使用统一的每日文档
 
 
 def get_doc_root_block(token, doc_id):
@@ -324,14 +279,16 @@ def get_doc_root_block(token, doc_id):
         return None
 
 
-def append_to_doc(token, doc_id, content, timestamp):
-    """追加内容到文档
+def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category_name=""):
+    """追加内容到文档（带分类标题）
     
     Args:
         token: 飞书 access token
         doc_id: 文档 ID
         content: 想法内容
         timestamp: 时间戳
+        category_emoji: 分类图标（可选）
+        category_name: 分类名称（可选）
         
     Returns:
         bool: 是否成功
@@ -350,6 +307,12 @@ def append_to_doc(token, doc_id, content, timestamp):
             "Content-Type": "application/json"
         }
         
+        # 格式化内容：包含分类标题
+        if category_emoji and category_name:
+            formatted_content = f"## {category_emoji} {category_name}\n**{timestamp}**\n{content}\n\n"
+        else:
+            formatted_content = f"**{timestamp}**\n{content}\n\n"
+        
         # 最简化版本（block_type: 2 = 文本块）
         data = {
             "children": [
@@ -359,7 +322,7 @@ def append_to_doc(token, doc_id, content, timestamp):
                         "elements": [
                             {
                                 "text_run": {
-                                    "content": f"### {timestamp}\n{content}\n\n"
+                                    "content": formatted_content
                                 }
                             }
                         ],
@@ -409,9 +372,7 @@ def append_to_doc(token, doc_id, content, timestamp):
 def save_to_feishu(token, category, content, timestamp, category_name, category_emoji, user_open_id=None):
     """保存想法到飞书文档（自动授予用户编辑权限）
     
-    同时保存到：
-    1. 分类文档
-    2. 汇总文档
+    保存到统一的每日文档，内容按分类分段
     
     Args:
         token: 飞书 access token
@@ -423,57 +384,39 @@ def save_to_feishu(token, category, content, timestamp, category_name, category_
         user_open_id: 用户的 open_id（可选，用于自动授权编辑权限）
         
     Returns:
-        dict: {"success": bool, "doc_url": str, "summary_url": str}
+        dict: {"success": bool, "doc_url": str}
     """
     if not token:
         print("⚠️  未获取到 token")
-        return {"success": False, "doc_url": None, "summary_url": None}
+        return {"success": False, "doc_url": None}
     
     # 使用配置的时区获取当前日期
     now = datetime.now(tz)
     date_str = now.strftime("%Y-%m-%d")
     time_str = timestamp.split(" ")[1] if " " in timestamp else timestamp
     
-    success = True
-    doc_url = None
-    summary_url = None
+    # 获取或创建统一的每日文档
+    doc_id = get_or_create_unified_daily_doc(token, date_str, user_open_id)
     
-    # 1️⃣ 保存到分类文档
-    doc_id = get_or_create_daily_doc(token, category, date_str, category_name, category_emoji, user_open_id)
-    if doc_id:
-        if append_to_doc(token, doc_id, content, time_str):
-            print(f"✅ 已保存到分类文档: {category_name}")
-            # 构造文档链接
-            doc_url = f"https://feishu.cn/docx/{doc_id}"
-        else:
-            success = False
+    if not doc_id:
+        print(f"❌ 无法创建每日文档")
+        return {"success": False, "doc_url": None}
+    
+    # 追加内容（带分类标题）
+    if append_to_doc(token, doc_id, content, time_str, category_emoji, category_name):
+        print(f"✅ 已保存到每日文档: {category_emoji} {category_name}")
+        doc_url = f"https://feishu.cn/docx/{doc_id}"
+        return {
+            "success": True,
+            "doc_url": doc_url
+        }
     else:
-        print(f"❌ 无法创建分类文档: {category_name}")
-        success = False
-    
-    # 2️⃣ 保存到汇总文档
-    summary_doc_id = get_or_create_summary_doc(token, date_str, user_open_id)
-    if summary_doc_id:
-        summary_content = f"【{category_emoji} {category_name}】{content}"
-        if append_to_doc(token, summary_doc_id, summary_content, time_str):
-            print(f"✅ 已保存到汇总文档")
-            # 构造汇总文档链接
-            summary_url = f"https://feishu.cn/docx/{summary_doc_id}"
-        else:
-            success = False
-    else:
-        print(f"❌ 无法创建汇总文档")
-        success = False
-    
-    return {
-        "success": success,
-        "doc_url": doc_url,
-        "summary_url": summary_url
-    }
+        print(f"❌ 保存失败")
+        return {"success": False, "doc_url": None}
 
 
 def read_daily_summary(token, date_str):
-    """读取指定日期的汇总文档
+    """读取指定日期的每日文档
     
     Args:
         token: 飞书 access token
@@ -485,7 +428,8 @@ def read_daily_summary(token, date_str):
     if not token:
         return None
     
-    title = f"{date_str} 📊 全部想法汇总"
+    # 统一文档标题
+    title = f"{date_str} 📝 每日记录"
     doc_id = find_doc_by_title(token, title)
     
     if not doc_id:
@@ -656,7 +600,7 @@ def list_today_docs(token):
 
 
 def list_docs_by_date(token, date_str):
-    """列出指定日期的文档
+    """列出指定日期的文档（现在每天只有一个统一文档）
     
     Args:
         token: 飞书 access token
@@ -670,91 +614,20 @@ def list_docs_by_date(token, date_str):
     
     docs = []
     
-    # 添加汇总文档
-    summary_title = f"{date_str} 📊 全部想法汇总"
-    summary_doc_id = find_doc_by_title(token, summary_title)
-    if summary_doc_id:
+    # 查找统一的每日文档
+    title = f"{date_str} 📝 每日记录"
+    doc_id = find_doc_by_title(token, title)
+    if doc_id:
         docs.append({
-            'title': summary_title,
-            'url': f"https://feishu.cn/docx/{summary_doc_id}",
-            'emoji': '📊',
-            'category': '汇总'
+            'title': title,
+            'url': f"https://feishu.cn/docx/{doc_id}",
+            'emoji': '📝',
+            'category': '每日记录'
         })
     
-    # 添加各分类文档
-    for category, info in CATEGORY_FOLDERS.items():
-        title = f"{date_str} {info['emoji']} {info['name']}记录"
-        doc_id = find_doc_by_title(token, title)
-        if doc_id:
-            docs.append({
-                'title': title,
-                'url': f"https://feishu.cn/docx/{doc_id}",
-                'emoji': info['emoji'],
-                'category': info['name']
-            })
-    
     return docs
-
-
-def list_today_docs(token):
-    """列出今天的所有文档
-    
-    Args:
-        token: 飞书 access token
-        
-    Returns:
-        list: [{"title": str, "url": str, "doc_id": str}]
-    """
-    if not token:
-        return []
-    
-    # 获取今天的日期
-    now = datetime.now(tz)
-    date_str = now.strftime("%Y-%m-%d")
-    
-    # 分类配置（和主程序保持一致）
-    categories = {
-        "work": {"name": "工作", "emoji": "💼"},
-        "life": {"name": "生活", "emoji": "🏠"},
-        "study": {"name": "学习", "emoji": "📚"},
-        "inspiration": {"name": "灵感", "emoji": "💡"},
-        "todo": {"name": "待办", "emoji": "✅"},
-        "health": {"name": "健康", "emoji": "💪"},
-        "finance": {"name": "财务", "emoji": "💰"},
-        "other": {"name": "其他", "emoji": "📝"},
-    }
-    
-    docs = []
-    
-    # 汇总文档（优先显示）
-    summary_title = f"{date_str} 📊 全部想法汇总"
-    summary_doc_id = find_doc_by_title(token, summary_title)
-    if summary_doc_id:
-        docs.append({
-            "title": summary_title,
-            "url": f"https://feishu.cn/docx/{summary_doc_id}",
-            "doc_id": summary_doc_id,
-            "category": "summary",
-            "emoji": "📊"
-        })
-    
-    # 各分类文档
-    for category, info in categories.items():
-        title = f"{date_str} {info['emoji']} {info['name']}记录"
-        doc_id = find_doc_by_title(token, title)
-        if doc_id:
-            docs.append({
-                "title": title,
-                "url": f"https://feishu.cn/docx/{doc_id}",
-                "doc_id": doc_id,
-                "category": category,
-                "emoji": info['emoji']
-            })
-    
-    return docs
-
 
 # 测试
 if __name__ == "__main__":
     print("飞书云文档存储模块 V3 - 简化版")
-    print("不使用文件夹，直接创建文档")
+    print("每天一个统一文档，按分类分段")
