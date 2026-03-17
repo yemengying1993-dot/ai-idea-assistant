@@ -1078,7 +1078,7 @@ def verify_feishu_signature():
         return False
 
     body_bytes = request.get_data()
-    content = FEISHU_VERIFY_TOKEN + timestamp + nonce + body_bytes.decode("utf-8")
+    content = timestamp + nonce + FEISHU_VERIFY_TOKEN + body_bytes.decode("utf-8")
     expected_sig = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return hmac.compare_digest(expected_sig, signature)
 
