@@ -636,7 +636,7 @@ def handle_command(command: str, open_id: str):
         else:
             send_feishu_text_message(open_id, "提示", "⚠️ 飞书云文档功能未启用")
     
-    elif command_lower == "/模型" or command_lower == "/model":
+    elif command_lower.startswith("/模型") or command_lower.startswith("/model"):
         # 处理模型切换命令
         # 检查是否带参数
         parts = command.strip().split()
