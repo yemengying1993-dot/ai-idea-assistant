@@ -1087,11 +1087,6 @@ def verify_feishu_signature():
 def feishu_webhook():
     """接收飞书消息"""
     try:
-        # 验证飞书签名
-        if not verify_feishu_signature():
-            print("❌ 飞书签名验证失败，拒绝请求")
-            return jsonify({"code": 403, "msg": "signature mismatch"}), 403
-
         data = request.get_json()
 
         print(f"📥 收到飞书请求")
