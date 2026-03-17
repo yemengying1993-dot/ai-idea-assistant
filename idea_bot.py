@@ -179,7 +179,7 @@ CATEGORIES = {
     "study": {"name": "学习", "emoji": "📚", "file": "study.md", "keywords": ["学习", "阅读", "课程", "知识", "技能"]},
     "inspiration": {"name": "灵感", "emoji": "💡", "file": "inspiration.md", "keywords": ["想法", "创意", "点子", "灵感", "思考"]},
     "todo": {"name": "待办", "emoji": "✅", "file": "todo.md", "keywords": ["待办", "提醒", "要做", "记得", "别忘"]},
-    "health": {"name": "健康", "emoji": "💪", "file": "health.md", "keywords": ["健康", "运动", "锻炼", "饮食", "睡眠"]},
+    "health": {"name": "健康", "emoji": "💪", "file": "health.md", "keywords": ["健康", "运动", "锻炼", "饮食", "睡眠", "健身", "跑步", "瑜伽", "游泳", "拉伸"]},
     "finance": {"name": "财务", "emoji": "💰", "file": "finance.md", "keywords": ["理财", "投资", "股票", "消费", "预算"]},
     "other": {"name": "其他", "emoji": "📝", "file": "other.md", "keywords": []}
 }
