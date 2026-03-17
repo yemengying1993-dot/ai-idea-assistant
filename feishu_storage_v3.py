@@ -93,15 +93,21 @@ def add_doc_permission(token, doc_id, user_open_id):
             "Content-Type": "application/json"
         }
         
+        # 参数顺序：type必须在最前面
         data = {
+            "type": "user",
+            "perm": "edit",
             "member_type": "openid",
-            "member_id": user_open_id,
-            "perm": "edit",  # 可编辑权限
-            "type": "user"   # 成员类型：普通用户
+            "member_id": user_open_id
         }
+        
+        print(f"🔍 授权请求: {url}")
+        print(f"🔍 授权参数: {data}")
         
         response = requests.post(url, headers=headers, json=data)
         result = response.json()
+        
+        print(f"🔍 授权响应: {result}")
         
         if result.get("code") == 0:
             print(f"✅ 已授予编辑权限: {doc_id} → {user_open_id}")
@@ -116,6 +122,8 @@ def add_doc_permission(token, doc_id, user_open_id):
             
     except Exception as e:
         print(f"❌ 授权异常: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
