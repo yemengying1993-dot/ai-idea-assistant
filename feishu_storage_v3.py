@@ -294,7 +294,7 @@ def insert_image_to_doc(token, doc_id, root_block_id, message_id, image_key):
         create_resp = requests.post(
             create_url,
             headers=headers_json,
-            json={"children": [{"block_type": 27}]},
+            json={"children": [{"block_type": 27, "image": {}}]},
         )
         create_result = create_resp.json()
         if create_result.get("code") != 0:
