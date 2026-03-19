@@ -269,93 +269,91 @@ def get_doc_root_block(token, doc_id):
         return None
 
 
-def upload_image_to_doc(token, doc_id, message_id, image_key):
-    """从飞书 IM 下载图片并上传到飞书文档媒体库
+def insert_image_to_doc(token, doc_id, root_block_id, message_id, image_key):
+    """将飞书 IM 图片插入文档，按官方三步流程：
+    1. 创建空图片块，获取 block_id
+    2. 用 block_id 作为 parent_node 上传图片素材，获取 file_token
+    3. 用 replace_image 操作将 file_token 关联到图片块
 
     Args:
         token: 飞书 access token
-        doc_id: 目标文档 ID
-        message_id: 消息 ID（用于下载图片）
-        image_key: 图片 key
+        doc_id: 文档 ID
+        root_block_id: 父块 ID（文档根块）
+        message_id: 飞书消息 ID
+        image_key: 消息中的图片 key
 
     Returns:
-        file_token: 上传成功返回 file_token，失败返回 None
+        bool
     """
-    try:
-        # Step 1: 从 IM 下载图片（流式，不落本地磁盘）
-        download_url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}/resources/{image_key}"
-        headers = {"Authorization": f"Bearer {token}"}
-        img_response = requests.get(download_url, headers=headers, params={"type": "image"})
+    headers_json = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers_auth = {"Authorization": f"Bearer {token}"}
 
+    try:
+        # 步骤一：创建空图片块
+        create_url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{root_block_id}/children"
+        create_resp = requests.post(
+            create_url,
+            headers=headers_json,
+            json={"children": [{"block_type": 27}]},
+        )
+        create_result = create_resp.json()
+        if create_result.get("code") != 0:
+            print(f"❌ 创建图片块失败: {create_result}")
+            return False
+        block_id = create_result["data"]["children"][0]["block_id"]
+        print(f"✅ 图片块创建成功: {block_id}")
+
+        # 步骤二：从 IM 下载图片
+        download_url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}/resources/{image_key}"
+        img_response = requests.get(download_url, headers=headers_auth, params={"type": "image"})
         if img_response.status_code != 200:
             print(f"❌ 下载图片失败: HTTP {img_response.status_code}")
-            return None
+            return False
 
         content_type = img_response.headers.get("Content-Type", "image/png")
         ext = "jpg" if "jpeg" in content_type or "jpg" in content_type else \
               "gif" if "gif" in content_type else \
               "webp" if "webp" in content_type else "png"
-
         image_data = img_response.content
 
-        # Step 2: 上传到飞书文档媒体库
-        upload_url = "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all"
-        upload_response = requests.post(
-            upload_url,
-            headers={"Authorization": f"Bearer {token}"},
+        # 步骤二：上传图片素材，parent_node 为图片块的 block_id
+        upload_resp = requests.post(
+            "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all",
+            headers=headers_auth,
             data={
                 "file_name": f"{image_key}.{ext}",
                 "parent_type": "docx_image",
-                "parent_node": doc_id,
+                "parent_node": block_id,
                 "size": str(len(image_data)),
             },
             files={"file": (f"{image_key}.{ext}", image_data, content_type)},
         )
-        result = upload_response.json()
+        upload_result = upload_resp.json()
+        if upload_result.get("code") != 0:
+            print(f"❌ 图片上传失败: {upload_result}")
+            return False
+        file_token = upload_result["data"]["file_token"]
+        print(f"✅ 图片上传成功: {file_token}")
 
-        if result.get("code") == 0:
-            file_token = result.get("data", {}).get("file_token")
-            print(f"✅ 图片上传成功: {file_token}")
-            return file_token
-        else:
-            print(f"❌ 图片上传失败: {result}")
-            return None
+        # 步骤三：关联 file_token 到图片块
+        update_url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{block_id}"
+        update_resp = requests.patch(
+            update_url,
+            headers=headers_json,
+            json={"replace_image": {"token": file_token}},
+        )
+        update_result = update_resp.json()
+        if update_result.get("code") != 0:
+            print(f"❌ 关联图片失败: {update_result}")
+            return False
+        print(f"✅ 图片关联成功")
+        return True
 
     except Exception as e:
-        print(f"❌ 图片处理异常: {e}")
+        print(f"❌ 图片插入异常: {e}")
         import traceback
         traceback.print_exc()
-        return None
-
-
-def insert_image_block(token, doc_id, root_block_id, file_token):
-    """在文档末尾插入图片块（block_type 27）
-
-    Args:
-        token: 飞书 access token
-        doc_id: 文档 ID
-        root_block_id: 根块 ID
-        file_token: 图片 file_token
-
-    Returns:
-        bool
-    """
-    try:
-        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{root_block_id}/children"
-        response = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"children": [{"block_type": 27, "image": {"token": file_token}}]},
-        )
-        result = response.json()
-        if result.get("code") == 0:
-            print(f"✅ 图片块插入成功")
-            return True
-        else:
-            print(f"❌ 图片块插入失败: {result}")
-            return False
-    except Exception as e:
-        print(f"❌ 插入图片块异常: {e}")
+        return False
         return False
 
 
@@ -442,9 +440,7 @@ def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category
         # 插入图片块
         if image_keys and message_id:
             for image_key in image_keys:
-                file_token = upload_image_to_doc(token, doc_id, message_id, image_key)
-                if file_token:
-                    insert_image_block(token, doc_id, root_block_id, file_token)
+                insert_image_to_doc(token, doc_id, root_block_id, message_id, image_key)
 
         return True
 
