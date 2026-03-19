@@ -887,14 +887,17 @@ def send_feishu_message(open_id, content, category_name, category_emoji, timesta
         return False
 
 
-def save_idea(category: str, content: str, timestamp: str = None, user_open_id: str = None) -> dict:
+def save_idea(category: str, content: str, timestamp: str = None, user_open_id: str = None,
+              image_keys: list = None, message_id: str = None) -> dict:
     """保存想法（双重存储：本地文件 + 飞书云文档）
-    
+
     Args:
         category: 分类
         content: 内容
         timestamp: 时间戳（可选）
         user_open_id: 用户的 open_id（可选，用于飞书文档自动授权）
+        image_keys: 图片 key 列表（可选）
+        message_id: 消息 ID（可选，下载图片时需要）
     """
     if timestamp is None:
         timestamp = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
@@ -951,7 +954,9 @@ def save_idea(category: str, content: str, timestamp: str = None, user_open_id: 
                     timestamp=timestamp,
                     category_name=cat_info["name"],
                     category_emoji=cat_info["emoji"],
-                    user_open_id=user_open_id  # 传递用户ID用于自动授权
+                    user_open_id=user_open_id,
+                    image_keys=image_keys,
+                    message_id=message_id,
                 )
                 
                 if isinstance(result, dict):
@@ -1116,65 +1121,74 @@ def feishu_webhook():
         
         print(f"📩 收到飞书消息，类型: {message_type}, open_id: {open_id}, msg_id: {message_id}")
         
-        # 提取消息内容（支持 text 和 post 类型）
+        # 提取消息内容（支持 text / post / image 类型）
         content = None
+        image_keys = []
         content_str = message.get("content", "{}")
-        
+
         try:
             content_obj = json.loads(content_str)
-            
+
             if message_type == "text":
-                # text 类型：{"text": "消息内容"}
                 content = content_obj.get("text", "").strip()
-            
+
+            elif message_type == "image":
+                # 纯图片消息
+                image_key = content_obj.get("image_key", "")
+                if image_key:
+                    image_keys.append(image_key)
+                content = "[图片]"
+
             elif message_type == "post":
                 # post 类型的两种可能结构：
                 # 1. {"zh_cn": {"title": "...", "content": [...]}}  (旧版)
                 # 2. {"title": "...", "content": [...]}  (新版/当前)
-                
-                # 尝试从 zh_cn 获取（旧版）
                 zh_cn = content_obj.get("zh_cn", {})
                 if zh_cn:
                     title = zh_cn.get("title", "").strip()
                     post_content = zh_cn.get("content", [])
                 else:
-                    # 直接从根级别获取（新版）
                     title = content_obj.get("title", "").strip()
                     post_content = content_obj.get("content", [])
-                
+
                 text_parts = []
-                
-                # 遍历所有段落
+
                 for paragraph in post_content:
                     if isinstance(paragraph, list):
-                        # 每个段落是一个数组，包含多个文本元素
                         paragraph_texts = []
                         for element in paragraph:
-                            if isinstance(element, dict) and element.get("tag") == "text":
+                            if not isinstance(element, dict):
+                                continue
+                            tag = element.get("tag")
+                            if tag == "text":
                                 text = element.get("text", "").strip()
                                 if text:
                                     paragraph_texts.append(text)
-                        
-                        # 合并段落内的所有文本（用空格连接）
+                            elif tag == "img":
+                                image_key = element.get("image_key", "")
+                                if image_key:
+                                    image_keys.append(image_key)
+
                         if paragraph_texts:
                             text_parts.append("".join(paragraph_texts))
-                
-                # 组合标题和内容（用换行分隔段落）
+
                 if title and text_parts:
                     content = f"{title}\n\n" + "\n".join(text_parts)
                 elif title:
                     content = title
                 elif text_parts:
                     content = "\n".join(text_parts)
-                
-                print(f"📝 post类型消息解析成功: 标题={title[:50] if title else '(无)'}, 段落数={len(text_parts)}")
-        
+                elif image_keys:
+                    content = "[图片]"
+
+                print(f"📝 post类型消息解析: 标题={title[:50] if title else '(无)'}, 段落数={len(text_parts)}, 图片数={len(image_keys)}")
+
         except Exception as e:
             print(f"⚠️  解析消息内容失败: {e}")
             import traceback
             traceback.print_exc()
             content = content_str.strip()
-        
+
         # 检查内容是否为空
         if not content:
             print("⚠️  消息内容为空")
@@ -1200,7 +1214,8 @@ def feishu_webhook():
         
         # 保存
         try:
-            result = save_idea(category, content, user_open_id=open_id)
+            result = save_idea(category, content, user_open_id=open_id,
+                               image_keys=image_keys, message_id=message_id)
             print(f"✅ 已保存到: {result['category']}")
             print(f"📄 文件路径: {result['file']}")
         except Exception as e:

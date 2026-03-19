@@ -269,9 +269,100 @@ def get_doc_root_block(token, doc_id):
         return None
 
 
-def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category_name=""):
-    """追加内容到文档（带分类标题）
-    
+def upload_image_to_doc(token, doc_id, message_id, image_key):
+    """从飞书 IM 下载图片并上传到飞书文档媒体库
+
+    Args:
+        token: 飞书 access token
+        doc_id: 目标文档 ID
+        message_id: 消息 ID（用于下载图片）
+        image_key: 图片 key
+
+    Returns:
+        file_token: 上传成功返回 file_token，失败返回 None
+    """
+    try:
+        # Step 1: 从 IM 下载图片（流式，不落本地磁盘）
+        download_url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}/resources/{image_key}"
+        headers = {"Authorization": f"Bearer {token}"}
+        img_response = requests.get(download_url, headers=headers, params={"type": "image"})
+
+        if img_response.status_code != 200:
+            print(f"❌ 下载图片失败: HTTP {img_response.status_code}")
+            return None
+
+        content_type = img_response.headers.get("Content-Type", "image/png")
+        ext = "jpg" if "jpeg" in content_type or "jpg" in content_type else \
+              "gif" if "gif" in content_type else \
+              "webp" if "webp" in content_type else "png"
+
+        image_data = img_response.content
+
+        # Step 2: 上传到飞书文档媒体库
+        upload_url = "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all"
+        upload_response = requests.post(
+            upload_url,
+            headers={"Authorization": f"Bearer {token}"},
+            data={
+                "file_name": f"{image_key}.{ext}",
+                "parent_type": "docx_image",
+                "parent_node": doc_id,
+                "size": str(len(image_data)),
+            },
+            files={"file": (f"{image_key}.{ext}", image_data, content_type)},
+        )
+        result = upload_response.json()
+
+        if result.get("code") == 0:
+            file_token = result.get("data", {}).get("file_token")
+            print(f"✅ 图片上传成功: {file_token}")
+            return file_token
+        else:
+            print(f"❌ 图片上传失败: {result}")
+            return None
+
+    except Exception as e:
+        print(f"❌ 图片处理异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def insert_image_block(token, doc_id, root_block_id, file_token):
+    """在文档末尾插入图片块（block_type 27）
+
+    Args:
+        token: 飞书 access token
+        doc_id: 文档 ID
+        root_block_id: 根块 ID
+        file_token: 图片 file_token
+
+    Returns:
+        bool
+    """
+    try:
+        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{root_block_id}/children"
+        response = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"children": [{"block_type": 27, "image": {"token": file_token}}]},
+        )
+        result = response.json()
+        if result.get("code") == 0:
+            print(f"✅ 图片块插入成功")
+            return True
+        else:
+            print(f"❌ 图片块插入失败: {result}")
+            return False
+    except Exception as e:
+        print(f"❌ 插入图片块异常: {e}")
+        return False
+
+
+def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category_name="",
+                  image_keys=None, message_id=None):
+    """追加内容到文档（带分类标题，支持图片）
+
     Args:
         token: 飞书 access token
         doc_id: 文档 ID
@@ -279,7 +370,9 @@ def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category
         timestamp: 时间戳
         category_emoji: 分类图标（可选）
         category_name: 分类名称（可选）
-        
+        image_keys: 图片 key 列表（可选）
+        message_id: 消息 ID，下载图片时需要（可选）
+
     Returns:
         bool: 是否成功
     """
@@ -342,11 +435,19 @@ def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category
         # 检查业务逻辑错误
         if result.get("code") == 0:
             print(f"✅ 内容追加成功")
-            return True
         else:
             print(f"❌ 追加内容失败: {result}")
             return False
-            
+
+        # 插入图片块
+        if image_keys and message_id:
+            for image_key in image_keys:
+                file_token = upload_image_to_doc(token, doc_id, message_id, image_key)
+                if file_token:
+                    insert_image_block(token, doc_id, root_block_id, file_token)
+
+        return True
+
     except requests.exceptions.RequestException as req_err:
         print(f"❌ 网络请求异常: {req_err}")
         return False
@@ -357,7 +458,8 @@ def append_to_doc(token, doc_id, content, timestamp, category_emoji="", category
         return False
 
 
-def save_to_feishu(token, category, content, timestamp, category_name, category_emoji, user_open_id=None):
+def save_to_feishu(token, category, content, timestamp, category_name, category_emoji,
+                   user_open_id=None, image_keys=None, message_id=None):
     """保存想法到飞书文档（自动授予用户编辑权限）
     
     保存到统一的每日文档，内容按分类分段
@@ -391,7 +493,8 @@ def save_to_feishu(token, category, content, timestamp, category_name, category_
         return {"success": False, "doc_url": None}
     
     # 追加内容（带分类标题）
-    if append_to_doc(token, doc_id, content, time_str, category_emoji, category_name):
+    if append_to_doc(token, doc_id, content, time_str, category_emoji, category_name,
+                     image_keys=image_keys, message_id=message_id):
         print(f"✅ 已保存到每日文档: {category_emoji} {category_name}")
         doc_url = f"https://feishu.cn/docx/{doc_id}"
         return {
