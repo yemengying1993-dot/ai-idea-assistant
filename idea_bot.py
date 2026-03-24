@@ -61,6 +61,15 @@ except ImportError:
     FEISHU_STORAGE_AVAILABLE = False
     print("⚠️  飞书云文档存储模块未找到，将只使用本地存储")
 
+# 导入 Obsidian 存储模块
+try:
+    from obsidian_storage import save_to_obsidian, read_daily_notes, init_vault
+    OBSIDIAN_STORAGE_AVAILABLE = True
+    print("✅ Obsidian 存储模块已加载")
+except ImportError:
+    OBSIDIAN_STORAGE_AVAILABLE = False
+    print("⚠️  Obsidian 存储模块未找到")
+
 app = Flask(__name__)
 
 # ========== 配置 ==========
@@ -77,6 +86,10 @@ WEWORK_CORP_ID = os.getenv("WEWORK_CORP_ID", "")
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID", "")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET", "")
 FEISHU_VERIFY_TOKEN = os.getenv("FEISHU_VERIFY_TOKEN", "")  # 飞书事件订阅验证令牌
+
+# 存储模式配置：feishu / obsidian / both
+STORAGE_MODE = os.getenv("STORAGE_MODE", "feishu").lower()
+print(f"📦 存储模式: {STORAGE_MODE}")
 
 # 飞书 Token 缓存
 feishu_token_cache = {"token": None, "expire_time": 0}
@@ -942,8 +955,8 @@ def save_idea(category: str, content: str, timestamp: str = None, user_open_id: 
     # 2️⃣ 保存到飞书云文档
     feishu_success = False
     doc_url = None
-    
-    if FEISHU_STORAGE_AVAILABLE:
+
+    if STORAGE_MODE in ("feishu", "both") and FEISHU_STORAGE_AVAILABLE:
         token = get_feishu_tenant_access_token()
         if token:
             try:
@@ -958,23 +971,42 @@ def save_idea(category: str, content: str, timestamp: str = None, user_open_id: 
                     image_keys=image_keys,
                     message_id=message_id,
                 )
-                
+
                 if isinstance(result, dict):
                     feishu_success = result.get("success", False)
                     doc_url = result.get("doc_url")
                 else:
-                    # 兼容旧版本（返回 bool）
                     feishu_success = result
-                
+
                 if feishu_success:
                     print(f"✅ 飞书云文档保存成功")
             except Exception as e:
                 print(f"⚠️  飞书云文档保存失败: {e}")
-    
+
+    # 3️⃣ 保存到 Obsidian vault
+    obsidian_success = False
+
+    if STORAGE_MODE in ("obsidian", "both") and OBSIDIAN_STORAGE_AVAILABLE:
+        try:
+            result = save_to_obsidian(
+                category=category,
+                content=content,
+                timestamp=timestamp,
+                category_name=cat_info["name"],
+                category_emoji=cat_info["emoji"],
+                image_keys=image_keys,
+            )
+            obsidian_success = result.get("success", False)
+            if obsidian_success:
+                print(f"✅ Obsidian 笔记保存成功")
+        except Exception as e:
+            print(f"⚠️  Obsidian 保存失败: {e}")
+
     return {
-        "success": local_success or feishu_success,
+        "success": local_success or feishu_success or obsidian_success,
         "local_saved": local_success,
         "feishu_saved": feishu_success,
+        "obsidian_saved": obsidian_success,
         "category": cat_info["name"],
         "emoji": cat_info["emoji"],
         "file": str(category_file),
