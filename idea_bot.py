@@ -63,7 +63,7 @@ except ImportError:
 
 # 导入 Obsidian 存储模块
 try:
-    from obsidian_storage import save_to_obsidian, read_daily_notes, init_vault
+    from obsidian_storage import save_to_obsidian, read_daily_notes
     OBSIDIAN_STORAGE_AVAILABLE = True
     print("✅ Obsidian 存储模块已加载")
 except ImportError:
