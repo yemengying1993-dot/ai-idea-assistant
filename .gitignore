@@ -8,6 +8,9 @@ ideas/
 *.md
 !README.md
 
+# Obsidian vault（单独的 Git 仓库，不纳入本项目管理）
+obsidian_vault/
+
 # Python
 __pycache__/
 *.py[cod]
