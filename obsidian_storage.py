@@ -13,7 +13,6 @@ from datetime import datetime
 
 # ========== 配置 ==========
 OBSIDIAN_GITHUB_TOKEN = os.getenv("OBSIDIAN_GITHUB_TOKEN", "").strip()
-print(f"🔑 Obsidian Token 前缀: {OBSIDIAN_GITHUB_TOKEN[:8]}... 长度: {len(OBSIDIAN_GITHUB_TOKEN)}")
 OBSIDIAN_GITHUB_REPO = os.getenv("OBSIDIAN_GITHUB_REPO", "")   # e.g. luckylucky-ai/obsidian
 OBSIDIAN_NOTES_SUBDIR = os.getenv("OBSIDIAN_NOTES_SUBDIR", "Ideas")
 GITHUB_API = "https://api.github.com"
@@ -21,7 +20,7 @@ GITHUB_API = "https://api.github.com"
 
 def _headers():
     return {
-        "Authorization": f"token {OBSIDIAN_GITHUB_TOKEN}",
+        "Authorization": f"Bearer {OBSIDIAN_GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
     }
 
